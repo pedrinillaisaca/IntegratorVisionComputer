@@ -21,30 +21,31 @@
 #include <opencv2/video/video.hpp> 
 #include <opencv2/videoio/videoio.hpp>
 #include <opencv2/imgproc/imgproc.hpp> // Librería para realizar operaciones de PDI 
+
 using namespace cv;
 using namespace std;
 
 Mat frameActual, frame, frameAnterior, resta,resultado;
 
 
-int rratio = 3;
-int minT = 50;
-int maxT = rratio*minT;   
+
 
 // Variable que almacena el valor del track bar (Threshold)
-int mThreshold = 99;
-int maxBinaryValue=38;
-int thresholdType = 16;// Dame investigando bien para que sirve este parametro leo porfa
-
+int mThreshold = 100;
+int maxBinaryValue=255;
+int thresholdType = 4;// Dame investigando bien para que sirve este parametro leo porfa
+int dimensionK=3;
+int dimensionGB=7;//dimensionGaussianBLure
+int threshCanny=6;//val thresold canny
 
 // Variable que almacena el valor del track bar (Contrast Stretching)
 int mContrast = 0;
+//Variable para control de bordes
 
 // Variable que almacena el valor de K del (Contrast Stretching)
 int kContrast = 0;
 //Variable kernel
-int dimensionK=3;
-int dimensionGB=3;//dimensionGaussianBLure
+
 // kernel
 Mat elementoCruz = getStructuringElement(MORPH_CROSS, Size(dimensionK, dimensionK), Point(-1, -1));
 Mat elementoRecto = getStructuringElement(MORPH_RECT, Size(dimensionK, dimensionK), Point(-1, -1));
@@ -128,10 +129,21 @@ Mat aplyFilterGaussian(Mat img){
     }    
     return salida;
 }
+
+Mat aplyFilterBlur(Mat img){
+    Mat salida=img.clone();
+    if(dimensionGB%2!=0){             
+        blur(salida,salida,Size(dimensionGB,dimensionGB));//Borra Ruido;
+    }    
+    return salida;
+}
  
 Mat aplyCanny(Mat img){    
+    /*int rratio = 3;
+    int minT = 50;
+    int maxT = rratio*minT;   */
     Mat salida=img.clone();        
-    Canny(salida, salida, minT, maxT, 3);
+    Canny(salida, salida, threshCanny, threshCanny*100,3);//Pilas 3
     return salida;
 }
 
@@ -185,22 +197,46 @@ Mat aplySobel(Mat img){
 
 Mat aplyThresholdNativo(Mat img ){
     Mat imgP;
-    threshold(img,imgP,mThreshold,maxBinaryValue,thresholdType);
+    threshold(img,imgP,mThreshold,maxBinaryValue,thresholdType);//THRESH_BINARY  thresholdType
     return imgP;
+}
+
+Mat aplyContornos(Mat imgGris, Mat imgColor){
+    //RNG rng(12345);
+    vector<vector<Point> > contours;
+    vector<Vec4i> hierarchy;
+    findContours( imgGris, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE );
+    //Mat drawing = Mat::zeros( canny_output.size(), CV_8UC3 );
+    for( size_t i = 0; i< contours.size(); i++ )
+    {    
+        drawContours( imgColor, contours, (int)i, (255,255,255), 2, LINE_8, hierarchy, 0 );
+    }
+
+    return imgColor;
 }
 
 
 
 void detectarMovimiento() {
     namedWindow("Movimiento", WINDOW_AUTOSIZE);
-    Mat gray;
+    Mat gray;    
     resize(frame, frame, Size(), 0.45, 0.45);//Escalado
-    cvtColor(frame, gray, COLOR_BGR2GRAY);    
-    // Método para clonar imágenes
-    frameActual = gray.clone();
+    Mat frameProcess=frame.clone();
+    cvtColor(frame, gray, COLOR_BGR2GRAY);
+    gray=aplyCanny(gray);    
+    frameProcess=aplyContornos(gray,frameProcess);     
+    cvtColor(frameProcess,frameProcess, COLOR_BGR2GRAY);
+    frameProcess=aplyFilterGaussian(frameProcess);
+    frameProcess=aplyThresholdNativo(frameProcess);
+    frameProcess=aplyDilate(frameProcess);
+    //frameProcess=aplyFilterGaussian(frameProcess);
+
+    
+    frameActual = frameProcess.clone();
+    
 
     if (frameAnterior.rows == 0 || frameAnterior.cols == 0) {
-        frameAnterior = gray.clone();
+        frameAnterior = frameProcess.clone();
     }        
     resta = cv::abs(frameActual - frameAnterior);
     frameAnterior = frameActual.clone();
@@ -213,26 +249,14 @@ void detectarMovimiento() {
  */
 
     
-    
     //resta=aplyHerode(resta);    
-    resta=aplyDilate(resta); 
+    //resta=aplyDilate(resta); 
     //resta=aplyContrast_Threshold(resta);
-    resta=aplyFilterGaussian(resta);
-    resta=aplyThresholdNativo(resta);
-    resta=aplyGradient(resta);
+    //resta=aplyFilterGaussian(resta);    
+    //resta=aplyGradient(resta);
     //
-    //resta=aplyCanny(resta);
-    //resta=aplyeApertura(resta);
-    
-        
-    //   
-    
-    
-   
-    //
-    //resta=aplyHerode(resta);
-    //
-        
+    //resta=aplyeApertura(resta);   
+    //resta=aplyHerode(resta);        
     mostrarSinFondo();            
     imshow("Movimiento", resta);
     
@@ -245,6 +269,7 @@ void crearTrackbars(const string &nombre_ventana) {
     createTrackbar("ThresholdType",nombre_ventana, &thresholdType, 23, nullptr, nullptr);        
     createTrackbar("Tam Kernel",nombre_ventana, &dimensionK, 60, nullptr, nullptr);            
     createTrackbar("Tam Kernel Gaussian",nombre_ventana, &dimensionGB, 60, nullptr, nullptr);            
+    createTrackbar("Canny Thresh",nombre_ventana, &threshCanny, 255, nullptr, nullptr);            
 /*    createTrackbar("cStretching (m)",nombre_ventana, &mContrast, 255, nullptr, nullptr);
     createTrackbar("cStretching (k)",nombre_ventana, &kContrast, 200, nullptr, nullptr);
     
@@ -275,12 +300,13 @@ void leerArchivo(const string &path) {
                 break;
         }
         destroyAllWindows();
+
     }
 }
 
 void activarCamara() {
-    //VideoCapture video(0);
-    VideoCapture video("/home/trigun/Documentos/Examen/Ejemplos de Código UNIDAD 2 - Operaciones y preprocesamiento de imágenes-20201204/Integrador1/china.mp4");
+    VideoCapture video(0);
+    //VideoCapture video("/home/trigun/Documentos/Examen/Ejemplos de Código UNIDAD 2 - Operaciones y preprocesamiento de imágenes-20201204/Integrador1/panda1.mp4");
     if (video.isOpened()) {
         while (true) {
             video >> frame;
@@ -300,7 +326,7 @@ void activarCamara() {
 
 
 int main() {
-    //string path;
+    //string path;    
     //cin >> path;
     //leerArchivo(path);
     activarCamara();
