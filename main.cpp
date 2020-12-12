@@ -32,7 +32,10 @@ int minT = 50;
 int maxT = rratio*minT;   
 
 // Variable que almacena el valor del track bar (Threshold)
-int mThreshold = 16;
+int mThreshold = 99;
+int maxBinaryValue=38;
+int thresholdType = 16;// Dame investigando bien para que sirve este parametro leo porfa
+
 
 // Variable que almacena el valor del track bar (Contrast Stretching)
 int mContrast = 0;
@@ -40,19 +43,21 @@ int mContrast = 0;
 // Variable que almacena el valor de K del (Contrast Stretching)
 int kContrast = 0;
 //Variable kernel
-int dimensionK=5;
+int dimensionK=3;
+int dimensionGB=3;//dimensionGaussianBLure
 // kernel
 Mat elementoCruz = getStructuringElement(MORPH_CROSS, Size(dimensionK, dimensionK), Point(-1, -1));
 Mat elementoRecto = getStructuringElement(MORPH_RECT, Size(dimensionK, dimensionK), Point(-1, -1));
 Mat elementoEplip = getStructuringElement(MORPH_ELLIPSE, Size(dimensionK, dimensionK), Point(-1, -1));
 
+/*
 int logistic(int r){
     double rd = (double) r;
     double dK = ((double)kContrast)/100.0;
     double res = 1.0/(1.0+exp(-dK*(rd-((double)mContrast))));
     res*=255.0;
     return ((int) res);
-}
+}*/
 
 
 Mat aplyDilate(Mat img){
@@ -118,8 +123,8 @@ Mat aplyBackHat(Mat img){
 
 Mat aplyFilterGaussian(Mat img){
     Mat salida=img.clone();
-    if(dimensionK%2!=0){             
-        GaussianBlur(salida,salida,Size(dimensionK,dimensionK),1.7,1.7);//Borra Ruido;
+    if(dimensionGB%2!=0){             
+        GaussianBlur(salida,salida,Size(dimensionGB,dimensionGB),1.7,1.7);//Borra Ruido;
     }    
     return salida;
 }
@@ -149,6 +154,7 @@ void mostrarSinFondo(){
     imshow("resultado", resultado);
 }
 
+/*
 Mat aplyContrast_Threshold(Mat img){
     Mat gris=img.clone();
     int pixel=0;
@@ -169,13 +175,21 @@ Mat aplyContrast_Threshold(Mat img){
                 }
             }
     return gris;            
-}
+}*/
 
 Mat aplySobel(Mat img){
     Mat gris;
     Sobel(img,gris, CV_32F, 1, 0);
     return gris;            
 }
+
+Mat aplyThresholdNativo(Mat img ){
+    Mat imgP;
+    threshold(img,imgP,mThreshold,maxBinaryValue,thresholdType);
+    return imgP;
+}
+
+
 
 void detectarMovimiento() {
     namedWindow("Movimiento", WINDOW_AUTOSIZE);
@@ -191,41 +205,50 @@ void detectarMovimiento() {
     resta = cv::abs(frameActual - frameAnterior);
     frameAnterior = frameActual.clone();
 
-        
-    resta=aplyContrast_Threshold(resta);
-    resta=aplyFilterGaussian(resta);
-    //resta=aplyCanny(resta);
-    resta=aplyeApertura(resta);
-    //resta=aplyeApertura(resta);
-    resta=aplyHerode(resta);    
-    //resta=aplyHerode(resta);    
-    resta=aplyDilate(resta);    
-    
-    
-    resta=aplyGradient(resta);
+/*
     Mat top=aplyTopHat(resta);
     Mat black=aplyBackHat(resta);
     Mat t_b=abs(top-black);
+    add(resta,t_b,resta);    
+ */
 
-
-    Mat f;
-    add(resta,t_b,f);
+    
+    
+    //resta=aplyHerode(resta);    
+    resta=aplyDilate(resta); 
+    //resta=aplyContrast_Threshold(resta);
+    resta=aplyFilterGaussian(resta);
+    resta=aplyThresholdNativo(resta);
+    resta=aplyGradient(resta);
+    //
+    //resta=aplyCanny(resta);
+    //resta=aplyeApertura(resta);
+    
+        
+    //   
+    
+    
+   
     //
     //resta=aplyHerode(resta);
     //
         
     mostrarSinFondo();            
-    imshow("Movimiento", f);
+    imshow("Movimiento", resta);
     
 }
 
 void crearTrackbars(const string &nombre_ventana) {
 
-    createTrackbar("Threshold (m)",nombre_ventana, &mThreshold, 255, nullptr, nullptr);        
-    createTrackbar("cStretching (m)",nombre_ventana, &mContrast, 255, nullptr, nullptr);
+    createTrackbar("Threshold (m)",nombre_ventana, &mThreshold, 255, nullptr, nullptr);
+    createTrackbar("MaxBinaryValue",nombre_ventana, &maxBinaryValue, 255, nullptr, nullptr);        
+    createTrackbar("ThresholdType",nombre_ventana, &thresholdType, 23, nullptr, nullptr);        
+    createTrackbar("Tam Kernel",nombre_ventana, &dimensionK, 60, nullptr, nullptr);            
+    createTrackbar("Tam Kernel Gaussian",nombre_ventana, &dimensionGB, 60, nullptr, nullptr);            
+/*    createTrackbar("cStretching (m)",nombre_ventana, &mContrast, 255, nullptr, nullptr);
     createTrackbar("cStretching (k)",nombre_ventana, &kContrast, 200, nullptr, nullptr);
-    createTrackbar("Tam Kernel",nombre_ventana, &dimensionK, 60, nullptr, nullptr);
-    /*
+    
+    
     createTrackbar("threshold", nombre_ventana, &_threshold, 100, nullptr, nullptr);
     createTrackbar("k", nombre_ventana, &k, 100, nullptr, nullptr);
     createTrackbar("sigma", nombre_ventana, &sigma, 100, nullptr, nullptr);
@@ -256,8 +279,8 @@ void leerArchivo(const string &path) {
 }
 
 void activarCamara() {
-    VideoCapture video(0);
-    //VideoCapture video("/home/trigun/Documentos/Integrador1/panda.mp4");
+    //VideoCapture video(0);
+    VideoCapture video("/home/trigun/Documentos/Examen/Ejemplos de Código UNIDAD 2 - Operaciones y preprocesamiento de imágenes-20201204/Integrador1/china.mp4");
     if (video.isOpened()) {
         while (true) {
             video >> frame;
